@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     session_secure: bool = False
     session_signing_key: str = "dokladflow-dev-signing-key"
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=str(Path(__file__).resolve().parents[1] / ".env"), extra="ignore")
 
     @property
     def cors_origin_list(self) -> list[str]:

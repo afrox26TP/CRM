@@ -3,7 +3,7 @@ import {
   AlertTriangle, ArrowRight, BarChart3, Check, CheckCircle2, ChevronDown,
   CircleDollarSign, Download, FileCheck2, FileSpreadsheet, FileText, Filter,
   LayoutDashboard, Menu, Plus, ReceiptText, RefreshCw, Search, Settings,
-  Sparkles, Truck, Upload, Users, X,
+  Sparkles, Trash2, Truck, Upload, Users, X,
 } from 'lucide-react'
 import brandLogo from './assets/crm-logo.png'
 
@@ -90,7 +90,7 @@ function Metric({ icon: Icon, label, value, note, tone, progress }) {
   return <article className="metric"><div className={`metric-icon ${tone}`}><Icon size={21} /></div><div className="metric-copy"><p>{label}</p><strong>{value}</strong>{progress != null ? <div className="metric-progress"><span style={{ width: `${progress}%` }} /></div> : <small>{note}</small>}</div>{progress != null && <em>{progress}%</em>}</article>
 }
 
-function Dashboard({ data, documents, setPage, selectDocument }) {
+function Dashboard({ data, documents, setPage, selectDocument, deleteDocument }) {
   const recent = documents.slice(0, 5)
   const team = Object.entries(data.by_dispatcher || {})
   return <>
@@ -102,29 +102,29 @@ function Dashboard({ data, documents, setPage, selectDocument }) {
       <Metric icon={Sparkles} label="Míra automatizace" value="" progress={data.automation_rate ?? 0} tone="violet" />
     </section>
     <section className="dashboard-grid">
-      <div className="panel recent-panel"><div className="panel-heading"><div><h3>Poslední doklady</h3><p>Nejnovější příchozí dokumenty</p></div><button className="link-button" onClick={() => setPage('documents')}>Zobrazit vše <ArrowRight size={16} /></button></div><DocumentTable documents={recent} compact selectDocument={selectDocument} /></div>
+      <div className="panel recent-panel"><div className="panel-heading"><div><h3>Poslední doklady</h3><p>Nejnovější příchozí dokumenty</p></div><button className="link-button" onClick={() => setPage('documents')}>Zobrazit vše <ArrowRight size={16} /></button></div><DocumentTable documents={recent} compact selectDocument={selectDocument} onDeleteDocument={deleteDocument} /></div>
       <div className="panel team-panel"><div className="panel-heading"><div><h3>Vytížení řidičů</h3><p>Doklady podle řidiče kamionu</p></div></div>{team.length ? team.map(([name, count], index) => <div className="team-row" key={name}><span className={`avatar avatar-${index % 3}`}>{name[0]}{name.slice(-1)}</span><div><strong>{name}</strong><small>{count} dokladů</small></div><div className="team-bar"><span style={{ width: `${Math.min(100, Number(count) * 18 + 12)}%` }} /></div><b>{count}</b></div>) : <div className="empty"><Users /><strong>Zatím nejsou přidaní řidiči</strong><p>Přidejte je v nastavení.</p></div>}<div className="team-total"><CircleDollarSign size={20} /><div><small>Schválené náklady</small><strong>{money(data.approved_tax_total)}</strong></div></div></div>
     </section>
   </>
 }
 
-function DocumentTable({ documents, compact = false, selectDocument }) {
+function DocumentTable({ documents, compact = false, selectDocument, onDeleteDocument }) {
   if (!documents.length) return <div className="empty"><FileText /><strong>Žádné doklady</strong><p>Změňte filtr nebo nahrajte první dokument.</p></div>
-  return <div className="table-wrap"><table><thead><tr><th>Doklad</th><th>Typ</th><th>Stav</th>{!compact && <th>Řidič</th>}<th>Datum</th><th></th></tr></thead><tbody>{documents.map(doc => <tr key={doc.id} onClick={() => selectDocument(doc)}><td><div className="file-cell"><span className={doc.document_type === 'tax' ? 'tax-file' : ''}>{doc.document_type === 'tax' ? <ReceiptText size={19} /> : <FileText size={19} />}</span><div><strong>{doc.cmr_number || doc.supplier || doc.original_name}</strong><small>{doc.original_name}</small></div></div></td><td><Badge value={doc.document_type} map={typeMeta} /></td><td><Badge value={doc.status} map={statusMeta} /></td>{!compact && <td>{doc.dispatcher || '—'}</td>}<td>{dateValue(doc.issue_date || doc.created_at)}</td><td><button className="row-action" aria-label="Otevřít"><ArrowRight size={17} /></button></td></tr>)}</tbody></table></div>
+  return <div className="table-wrap"><table><thead><tr><th>Doklad</th><th>Typ</th><th>Stav</th>{!compact && <th>Řidič</th>}<th>Datum</th><th></th></tr></thead><tbody>{documents.map(doc => <tr key={doc.id} onClick={() => selectDocument(doc)}><td><div className="file-cell"><span className={doc.document_type === 'tax' ? 'tax-file' : ''}>{doc.document_type === 'tax' ? <ReceiptText size={19} /> : <FileText size={19} />}</span><div><strong>{doc.cmr_number || doc.supplier || doc.original_name}</strong><small>{doc.original_name}</small></div></div></td><td><Badge value={doc.document_type} map={typeMeta} /></td><td><Badge value={doc.status} map={statusMeta} /></td>{!compact && <td>{doc.dispatcher || '—'}</td>}<td>{dateValue(doc.issue_date || doc.created_at)}</td><td><div className="row-actions"><button className="row-action" aria-label="Otevřít"><ArrowRight size={17} /></button>{onDeleteDocument && <button className="row-action row-action-danger" aria-label="Smazat" onClick={(event) => { event.stopPropagation(); onDeleteDocument(doc) }}><Trash2 size={15} /></button>}</div></td></tr>)}</tbody></table></div>
 }
 
-function Documents({ documents, loading, filters, setFilters, selectDocument }) {
-  return <section className="panel page-panel"><div className="panel-heading docs-heading"><div><h3>Doklady</h3><p>{documents.length} položek podle zvolených filtrů</p></div><div className="view-toggle"><button className="active"><FileText size={16} /></button><button><BarChart3 size={16} /></button></div></div><div className="filters"><label className="search"><Search size={17} /><input value={filters.search} onChange={e => setFilters({ ...filters, search: e.target.value })} placeholder="Hledat CMR, dodavatele…" /></label><select value={filters.type} onChange={e => setFilters({ ...filters, type: e.target.value })}><option value="">Všechny typy</option><option value="cmr">CMR</option><option value="tax">Daňové doklady</option></select><select value={filters.status} onChange={e => setFilters({ ...filters, status: e.target.value })}><option value="">Všechny stavy</option>{Object.entries(statusMeta).map(([key, [label]]) => <option key={key} value={key}>{label}</option>)}</select><button className="filter-button"><Filter size={16} />Další filtry</button></div>{loading ? <div className="loading"><RefreshCw /> Načítám…</div> : <DocumentTable documents={documents} selectDocument={selectDocument} />}</section>
+function Documents({ documents, loading, filters, setFilters, selectDocument, deleteDocument }) {
+  return <section className="panel page-panel"><div className="panel-heading docs-heading"><div><h3>Doklady</h3><p>{documents.length} položek podle zvolených filtrů</p></div><div className="view-toggle"><button className="active"><FileText size={16} /></button><button><BarChart3 size={16} /></button></div></div><div className="filters"><label className="search"><Search size={17} /><input value={filters.search} onChange={e => setFilters({ ...filters, search: e.target.value })} placeholder="Hledat CMR, dodavatele…" /></label><select value={filters.type} onChange={e => setFilters({ ...filters, type: e.target.value })}><option value="">Všechny typy</option><option value="cmr">CMR</option><option value="tax">Daňové doklady</option></select><select value={filters.status} onChange={e => setFilters({ ...filters, status: e.target.value })}><option value="">Všechny stavy</option>{Object.entries(statusMeta).map(([key, [label]]) => <option key={key} value={key}>{label}</option>)}</select><button className="filter-button"><Filter size={16} />Další filtry</button></div>{loading ? <div className="loading"><RefreshCw /> Načítám…</div> : <DocumentTable documents={documents} selectDocument={selectDocument} onDeleteDocument={deleteDocument} />}</section>
 }
 
 function Transports({ transports, onImport }) {
   return <section className="panel page-panel"><div className="panel-heading"><div><h3>Přepravy z Konspedu</h3><p>Importované zakázky připravené k párování</p></div><button className="secondary" onClick={onImport}><FileSpreadsheet size={17} />Importovat Excel</button></div><div className="table-wrap"><table><thead><tr><th>Číslo CMR</th><th>Řidič / SPZ</th><th>Trasa</th><th>Datum</th><th>Cena</th><th>Řidič kamionu</th><th>Doklady</th></tr></thead><tbody>{transports.map(item => <tr key={item.id}><td><strong>{item.cmr_number}</strong></td><td><div className="stack"><strong>{item.driver_name || '—'}</strong><small>{item.license_plate || '—'}</small></div></td><td>{item.route || '—'}</td><td>{dateValue(item.transport_date)}</td><td><strong>{money(item.transport_price, item.currency)}</strong></td><td>{item.dispatcher || '—'}</td><td><span className="count-pill">{item.document_count}</span></td></tr>)}</tbody></table></div></section>
 }
 
-function Accounting({ documents, onExport }) {
+function Accounting({ documents, onExport, deleteDocument }) {
   const approved = documents.filter(d => ['approved', 'exported'].includes(d.status) && d.document_type === 'tax')
   const total = approved.reduce((sum, item) => sum + Number(item.gross_amount || 0), 0)
-  return <><section className="accounting-hero"><div className="metric-icon green"><CircleDollarSign /></div><div><p>Schválené náklady</p><strong>{money(total)}</strong><small>{approved.length} dokladů připravených pro účetnictví</small></div><button className="primary" onClick={onExport}><Download size={18} />Exportovat CSV</button></section><section className="panel page-panel"><div className="panel-heading"><div><h3>Daňové doklady</h3><p>Zkontrolované částky DPH a základu daně</p></div></div><DocumentTable documents={approved} selectDocument={() => {}} /></section></>
+  return <><section className="accounting-hero"><div className="metric-icon green"><CircleDollarSign /></div><div><p>Schválené náklady</p><strong>{money(total)}</strong><small>{approved.length} dokladů připravených pro účetnictví</small></div><button className="primary" onClick={onExport}><Download size={18} />Exportovat CSV</button></section><section className="panel page-panel"><div className="panel-heading"><div><h3>Daňové doklady</h3><p>Zkontrolované částky DPH a základu daně</p></div></div><DocumentTable documents={approved} selectDocument={() => {}} onDeleteDocument={deleteDocument} /></section></>
 }
 
 function SettingsPage({ employees, onEmployeeAdded }) {
@@ -148,7 +148,17 @@ function SettingsPage({ employees, onEmployeeAdded }) {
     finally { setBusy(false) }
   }
 
-  return <section className="settings-grid"><div className="panel settings-card"><div className="settings-icon"><Users /></div><h3>Přidat řidiče</h3><div className="login-form"><input value={name} onChange={e => setName(e.target.value)} placeholder="Jméno řidiče" /><input value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))} maxLength={4} placeholder="4místný PIN" /><button className="primary" disabled={busy || !name.trim() || pin.length !== 4} onClick={addEmployee}>{busy ? 'Ukládám…' : 'Přidat řidiče'}</button></div>{error && <div className="error-box"><AlertTriangle size={17} />{error}</div>}</div><div className="panel settings-card"><div className="settings-icon"><FileSpreadsheet /></div><h3>Seznam řidičů</h3>{employees.length ? <div className="employee-list">{employees.map(item => <article key={item.user_id}><span><Users size={18} /></span><div><strong>{item.name}</strong><small>ID: {item.user_id}</small></div></article>)}</div> : <div className="empty"><Users /><strong>Žádní řidiči</strong><p>Přidejte prvního řidiče.</p></div>}</div><div className="panel settings-card"><div className="settings-icon"><Sparkles /></div><h3>Google Document AI</h3><p>Cloudové vytěžování CMR, faktur a účtenek.</p><div className="connection"><i /> Připojení se ověřuje na backendu</div></div></section>
+  const removeEmployee = async (employee) => {
+    if (!window.confirm(`Opravdu chcete smazat řidiče ${employee.name}?`)) return
+    setBusy(true); setError('')
+    try {
+      await request(`/employees/${encodeURIComponent(employee.user_id)}`, { method: 'DELETE' })
+      onEmployeeAdded()
+    } catch (err) { setError(err.message) }
+    finally { setBusy(false) }
+  }
+
+  return <section className="settings-grid"><div className="panel settings-card"><div className="settings-icon"><Users /></div><h3>Přidat řidiče</h3><div className="login-form"><input value={name} onChange={e => setName(e.target.value)} placeholder="Jméno řidiče" /><input value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))} maxLength={4} placeholder="4místný PIN" /><button className="primary" disabled={busy || !name.trim() || pin.length !== 4} onClick={addEmployee}>{busy ? 'Ukládám…' : 'Přidat řidiče'}</button></div>{error && <div className="error-box"><AlertTriangle size={17} />{error}</div>}</div><div className="panel settings-card"><div className="settings-icon"><FileSpreadsheet /></div><h3>Seznam řidičů</h3>{employees.length ? <div className="employee-list">{employees.map(item => <article key={item.user_id}><span><Users size={18} /></span><div><strong>{item.name}</strong><small>ID: {item.user_id}</small></div><button className="secondary danger" disabled={busy} onClick={() => removeEmployee(item)}><Trash2 size={15} />Smazat</button></article>)}</div> : <div className="empty"><Users /><strong>Žádní řidiči</strong><p>Přidejte prvního řidiče.</p></div>}</div><div className="panel settings-card"><div className="settings-icon"><Sparkles /></div><h3>Google Document AI</h3><p>Cloudové vytěžování CMR, faktur a účtenek.</p><div className="connection"><i /> Připojení se ověřuje na backendu</div></div></section>
 }
 
 function UploadModal({ onClose, onDone, mode = 'documents' }) {
@@ -168,12 +178,22 @@ function UploadModal({ onClose, onDone, mode = 'documents' }) {
   return <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && onClose()}><div className="modal"><button className="modal-close" onClick={onClose}><X /></button><span className="modal-icon"><Upload /></span><h2>{isImport ? 'Importovat přepravy' : 'Nahrát nové doklady'}</h2><p>{isImport ? 'Vyberte aktuální tabulku z Konspedu.' : 'AI automaticky rozpozná CMR, fakturu nebo účtenku.'}</p><button className="dropzone" onClick={() => input.current.click()} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); setFiles([...e.dataTransfer.files]) }}><Upload /><strong>Přetáhněte soubory sem</strong><span>nebo klikněte pro výběr</span><small>{isImport ? 'XLSX, XLS nebo CSV · max. 25 MB' : 'JPG, PNG, WebP nebo PDF · max. 15 MB'}</small></button><input ref={input} hidden type="file" multiple={!isImport} accept={isImport ? '.xlsx,.xls,.csv' : 'image/jpeg,image/png,image/webp,application/pdf'} onChange={e => setFiles([...e.target.files])} />{files.length > 0 && <div className="selected-files">{files.map(file => <span key={file.name}><FileText size={15} />{file.name}<Check size={15} /></span>)}</div>}{error && <div className="error-box"><AlertTriangle size={17} />{error}</div>}<div className="modal-actions"><button className="secondary" onClick={onClose}>Zrušit</button><button className="primary" disabled={!files.length || busy} onClick={submit}>{busy ? <RefreshCw className="spin" size={17} /> : <Sparkles size={17} />}{busy ? 'Zpracovávám…' : isImport ? 'Importovat' : 'Spustit AI zpracování'}</button></div></div></div>
 }
 
-function DetailDrawer({ document, onClose, onSaved, employees }) {
+function DetailDrawer({ document, onClose, onSaved, onDeleted, employees }) {
   const [form, setForm] = useState(document)
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
   const set = (key, value) => setForm(old => ({ ...old, [key]: value }))
   const save = async status => { setBusy(true); try { await request(`/documents/${document.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ document_type: form.document_type, cmr_number: form.cmr_number || null, issue_date: form.issue_date || null, supplier: form.supplier || null, net_amount: form.net_amount === '' ? null : form.net_amount, vat_amount: form.vat_amount === '' ? null : form.vat_amount, gross_amount: form.gross_amount === '' ? null : form.gross_amount, dispatcher: form.dispatcher || null, status }) }); onSaved() } finally { setBusy(false) } }
-  return <div className="drawer-backdrop" onMouseDown={e => e.target === e.currentTarget && onClose()}><aside className="drawer"><div className="drawer-head"><div><Badge value={document.status} map={statusMeta} /><h2>Kontrola dokladu</h2><p>{document.original_name}</p></div><button className="icon-button" onClick={onClose}><X /></button></div><div className="confidence"><Sparkles size={18} /><div><strong>AI jistota {Math.round(Number(document.confidence || 0) * 100)} %</strong><span>Ověřte označené hodnoty před schválením.</span></div></div><div className="form-grid"><label>Typ dokladu<select value={form.document_type} onChange={e => set('document_type', e.target.value)}><option value="cmr">CMR</option><option value="tax">Daňový doklad</option><option value="unknown">Nerozpoznáno</option></select></label>{form.document_type === 'cmr' ? <label>Číslo CMR<input value={form.cmr_number || ''} onChange={e => set('cmr_number', e.target.value)} /></label> : <><label className="wide">Dodavatel<input value={form.supplier || ''} onChange={e => set('supplier', e.target.value)} /></label><label>Datum vystavení<input type="date" value={form.issue_date || ''} onChange={e => set('issue_date', e.target.value)} /></label><label>Základ DPH<input type="number" value={form.net_amount || ''} onChange={e => set('net_amount', e.target.value)} /></label><label>DPH<input type="number" value={form.vat_amount || ''} onChange={e => set('vat_amount', e.target.value)} /></label><label>Celkem s DPH<input type="number" value={form.gross_amount || ''} onChange={e => set('gross_amount', e.target.value)} /></label></>}<label>Řidič kamionu<select value={form.dispatcher || ''} onChange={e => set('dispatcher', e.target.value)}><option value="">Nepřiřazeno</option>{employees.map((item) => <option key={item.user_id} value={item.name}>{item.name}</option>)}</select></label></div>{document.transport_id && <div className="match-box"><CheckCircle2 /><div><strong>Spárováno s přepravou</strong><span>Konsped · ID {document.transport_id}</span></div></div>}<div className="drawer-actions"><button className="secondary" onClick={onClose}>Zavřít</button><button className="primary" disabled={busy} onClick={() => save('approved')}><Check size={18} />Schválit doklad</button></div></aside></div>
+  const removeDocument = async () => {
+    if (!window.confirm(`Opravdu chcete smazat doklad ${document.original_name}?`)) return
+    setBusy(true); setError('')
+    try {
+      await request(`/documents/${document.id}`, { method: 'DELETE' })
+      onDeleted()
+    } catch (err) { setError(err.message) }
+    finally { setBusy(false) }
+  }
+  return <div className="drawer-backdrop" onMouseDown={e => e.target === e.currentTarget && onClose()}><aside className="drawer"><div className="drawer-head"><div><Badge value={document.status} map={statusMeta} /><h2>Kontrola dokladu</h2><p>{document.original_name}</p></div><button className="icon-button" onClick={onClose}><X /></button></div><div className="confidence"><Sparkles size={18} /><div><strong>AI jistota {Math.round(Number(document.confidence || 0) * 100)} %</strong><span>Ověřte označené hodnoty před schválením.</span></div></div><div className="form-grid"><label>Typ dokladu<select value={form.document_type} onChange={e => set('document_type', e.target.value)}><option value="cmr">CMR</option><option value="tax">Daňový doklad</option><option value="unknown">Nerozpoznáno</option></select></label>{form.document_type === 'cmr' ? <label>Číslo CMR<input value={form.cmr_number || ''} onChange={e => set('cmr_number', e.target.value)} /></label> : <><label className="wide">Dodavatel<input value={form.supplier || ''} onChange={e => set('supplier', e.target.value)} /></label><label>Datum vystavení<input type="date" value={form.issue_date || ''} onChange={e => set('issue_date', e.target.value)} /></label><label>Základ DPH<input type="number" value={form.net_amount || ''} onChange={e => set('net_amount', e.target.value)} /></label><label>DPH<input type="number" value={form.vat_amount || ''} onChange={e => set('vat_amount', e.target.value)} /></label><label>Celkem s DPH<input type="number" value={form.gross_amount || ''} onChange={e => set('gross_amount', e.target.value)} /></label></>}<label>Řidič kamionu<select value={form.dispatcher || ''} onChange={e => set('dispatcher', e.target.value)}><option value="">Nepřiřazeno</option>{employees.map((item) => <option key={item.user_id} value={item.name}>{item.name}</option>)}</select></label></div>{error && <div className="error-box"><AlertTriangle size={17} />{error}</div>}{document.transport_id && <div className="match-box"><CheckCircle2 /><div><strong>Spárováno s přepravou</strong><span>Konsped · ID {document.transport_id}</span></div></div>}<div className="drawer-actions"><button className="secondary" disabled={busy} onClick={onClose}>Zavřít</button><button className="secondary danger" disabled={busy} onClick={removeDocument}><Trash2 size={16} />Smazat doklad</button><button className="primary" disabled={busy} onClick={() => save('approved')}><Check size={18} />Schválit doklad</button></div></aside></div>
 }
 
 function EmployeePortal({ session, onLogout }) {
@@ -255,6 +275,15 @@ export default function App() {
   useEffect(() => { const timer = setTimeout(load, filters.search ? 250 : 0); return () => clearTimeout(timer) }, [load, filters.search])
   const completeModal = () => { setUpload(null); load() }
   const completeDrawer = () => { setSelected(null); load() }
+  const completeDelete = () => { setSelected(null); load() }
+  const deleteDocument = useCallback(async (document) => {
+    if (!window.confirm(`Opravdu chcete smazat doklad ${document.original_name}?`)) return
+    try {
+      await request(`/documents/${document.id}`, { method: 'DELETE' })
+      if (selected?.id === document.id) setSelected(null)
+      load()
+    } catch (err) { setError(err.message) }
+  }, [load, selected])
   const logout = async () => {
     try { await request('/auth/logout', { method: 'POST' }) }
     finally {
@@ -279,16 +308,16 @@ export default function App() {
     } catch (err) { setError(err.message) }
   }, [load])
   const content = useMemo(() => {
-    if (page === 'dashboard') return <Dashboard data={dashboard} documents={documents} setPage={setPage} selectDocument={setSelected} />
-    if (page === 'documents') return <Documents documents={documents} loading={loading} filters={filters} setFilters={setFilters} selectDocument={setSelected} />
+    if (page === 'dashboard') return <Dashboard data={dashboard} documents={documents} setPage={setPage} selectDocument={setSelected} deleteDocument={deleteDocument} />
+    if (page === 'documents') return <Documents documents={documents} loading={loading} filters={filters} setFilters={setFilters} selectDocument={setSelected} deleteDocument={deleteDocument} />
     if (page === 'transports') return <Transports transports={transports} onImport={() => setUpload('transports')} />
-    if (page === 'accounting') return <Accounting documents={documents} onExport={exportAccounting} />
+    if (page === 'accounting') return <Accounting documents={documents} onExport={exportAccounting} deleteDocument={deleteDocument} />
     return <SettingsPage employees={employees} onEmployeeAdded={load} />
-  }, [page, dashboard, documents, transports, loading, filters, exportAccounting, employees, load])
+  }, [page, dashboard, documents, transports, loading, filters, exportAccounting, employees, load, deleteDocument])
 
   if (authLoading) return <div className="loading"><RefreshCw /> Ověřuji přihlášení…</div>
   if (!session) return <LoginGate onLoggedIn={(payload) => { setSession(payload); setPage('dashboard'); setDriver('Všichni') }} />
   if (session.role === 'employee') return <EmployeePortal session={session} onLogout={logout} />
 
-  return <div className="app-shell"><Sidebar active={page} onChange={setPage} open={menu} onClose={() => setMenu(false)} onLogout={logout} /><main><Header title={titles[page]} onMenu={() => setMenu(true)} onUpload={() => setUpload('documents')} /><div className="dispatcher-tabs"><span>Řidič:</span>{ownerDrivers.map(name => <button key={name} className={driver === name ? 'active' : ''} onClick={() => setDriver(name)}>{name}{name !== 'Všichni' && <b>{dashboard.by_dispatcher?.[name] || 0}</b>}</button>)}</div><div className="content">{error && <div className="api-warning"><AlertTriangle /><div><strong>Backend není dostupný</strong><span>{error} Spusťte FastAPI server podle README.</span></div><button onClick={load}>Zkusit znovu</button></div>}{content}</div></main>{upload && <UploadModal mode={upload} onClose={() => setUpload(null)} onDone={completeModal} />}{selected && <DetailDrawer document={selected} employees={employees} onClose={() => setSelected(null)} onSaved={completeDrawer} />}</div>
+  return <div className="app-shell"><Sidebar active={page} onChange={setPage} open={menu} onClose={() => setMenu(false)} onLogout={logout} /><main><Header title={titles[page]} onMenu={() => setMenu(true)} onUpload={() => setUpload('documents')} /><div className="dispatcher-tabs"><span>Řidič:</span>{ownerDrivers.map(name => <button key={name} className={driver === name ? 'active' : ''} onClick={() => setDriver(name)}>{name}{name !== 'Všichni' && <b>{dashboard.by_dispatcher?.[name] || 0}</b>}</button>)}</div><div className="content">{error && <div className="api-warning"><AlertTriangle /><div><strong>Backend není dostupný</strong><span>{error} Spusťte FastAPI server podle README.</span></div><button onClick={load}>Zkusit znovu</button></div>}{content}</div></main>{upload && <UploadModal mode={upload} onClose={() => setUpload(null)} onDone={completeModal} />}{selected && <DetailDrawer document={selected} employees={employees} onClose={() => setSelected(null)} onSaved={completeDrawer} onDeleted={completeDelete} />}</div>
 }

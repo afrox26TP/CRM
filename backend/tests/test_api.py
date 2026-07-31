@@ -118,3 +118,36 @@ def test_logout_revokes_cookie_session():
         assert client.get("/api/dashboard").status_code == 200
         assert client.post("/api/auth/logout").status_code == 200
         assert client.get("/api/dashboard").status_code == 401
+
+
+def test_owner_can_delete_document():
+    with TestClient(app) as client:
+        login_owner(client)
+        uploaded = client.post(
+            "/api/documents/upload",
+            files=[("files", (f"owner-{uuid4().hex}.jpg", b"fake-image-bytes", "image/jpeg"))],
+        )
+        assert uploaded.status_code == 201
+        document_id = uploaded.json()[0]["id"]
+
+        deleted = client.delete(f"/api/documents/{document_id}")
+        assert deleted.status_code == 204
+
+        missing = client.get(f"/api/documents/{document_id}")
+        assert missing.status_code == 404
+
+
+def test_owner_can_delete_employee():
+    with TestClient(app) as client:
+        login_owner(client)
+        pin = str(3000 + (uuid4().int % 6000))
+        created = client.post("/api/employees", json={"name": f"Mazany Ridic {uuid4().hex[:6]}", "pin": pin})
+        assert created.status_code == 201
+        user_id = created.json()["user_id"]
+
+        deleted = client.delete(f"/api/employees/{user_id}")
+        assert deleted.status_code == 204
+
+        employees = client.get("/api/employees")
+        assert employees.status_code == 200
+        assert all(item["user_id"] != user_id for item in employees.json())

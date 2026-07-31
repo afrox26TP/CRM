@@ -165,6 +165,16 @@ def create_employee(payload: EmployeeCreateRequest, _identity: Identity = Depend
     return employee
 
 
+@app.delete("/api/employees/{user_id}", status_code=204)
+def delete_employee(user_id: str, _identity: Identity = Depends(owner_only), db: Session = Depends(get_db)):
+    employee = db.scalar(select(UserAccount).where(UserAccount.user_id == user_id, UserAccount.role == "employee", UserAccount.is_active.is_(True)))
+    if not employee:
+        raise HTTPException(404, "Řidič nebyl nalezen.")
+    employee.is_active = False
+    db.commit()
+    return Response(status_code=204)
+
+
 @app.get("/api/dashboard")
 def dashboard(_identity: Identity = Depends(owner_only), db: Session = Depends(get_db)):
     statuses = dict(db.execute(select(Document.status, func.count(Document.id)).group_by(Document.status)).all())
@@ -250,6 +260,21 @@ def update_document(document_id: int, update: DocumentUpdate, identity: Identity
     db.commit()
     db.refresh(document)
     return document
+
+
+@app.delete("/api/documents/{document_id}", status_code=204)
+def delete_document(document_id: int, _identity: Identity = Depends(owner_only), db: Session = Depends(get_db)):
+    document = db.get(Document, document_id)
+    if not document:
+        raise HTTPException(404, "Doklad nebyl nalezen.")
+
+    stored_path = settings.storage_path / document.stored_name
+    if stored_path.exists():
+        stored_path.unlink()
+
+    db.delete(document)
+    db.commit()
+    return Response(status_code=204)
 
 
 @app.post("/api/documents/upload", response_model=list[DocumentOut], status_code=201)
