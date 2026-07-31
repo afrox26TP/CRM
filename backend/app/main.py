@@ -4,12 +4,12 @@ import json
 import mimetypes
 import uuid
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 import pandas as pd
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, inspect, select, text
@@ -18,8 +18,18 @@ from sqlalchemy.orm import Session
 from .auth import Identity, current_identity, owner_only
 from .config import get_settings
 from .database import Base, SessionLocal, engine, get_db
-from .models import AssignmentRule, AuditEvent, Document, Transport
-from .schemas import DocumentOut, DocumentUpdate, EmployeeDocumentOut, TransportOut
+from .models import AssignmentRule, AuditEvent, Document, Transport, UserAccount
+from .schemas import (
+    DocumentOut,
+    DocumentUpdate,
+    EmployeeCreateRequest,
+    EmployeeOut,
+    EmployeeDocumentOut,
+    LoginRequest,
+    SessionOut,
+    TransportOut,
+)
+from .security import create_session_token, current_utc, hash_password, normalize_employee_id
 from .services.document_ai import DocumentExtractionError, extract_document
 from .services.matching import assign_dispatcher, find_transport, normalize
 
@@ -29,6 +39,16 @@ MAX_DOCUMENT_SIZE = 15 * 1024 * 1024
 
 
 def _seed(db: Session) -> None:
+    owner_id = normalize_employee_id(settings.owner_name)
+    owner = db.scalar(select(UserAccount).where(UserAccount.user_id == owner_id))
+    if not owner:
+        db.add(UserAccount(user_id=owner_id, name=settings.owner_name, role="owner", pin_hash=hash_password(settings.owner_pin)))
+    else:
+        owner.name = settings.owner_name
+        owner.pin_hash = hash_password(settings.owner_pin)
+        owner.role = "owner"
+        owner.is_active = True
+
     if not db.scalar(select(func.count(Transport.id))):
         transports = [
             Transport(cmr_number="CMR-2026-001", cmr_normalized=normalize("CMR-2026-001"), transport_date=date(2026, 7, 28), driver_name="Petr Novák", license_plate="8AB 1234", route="Praha → Hamburg", transport_price=Decimal("28500"), currency="CZK", dispatcher="Tonda"),
@@ -99,9 +119,84 @@ def _transport_out(item: Transport) -> TransportOut:
     return data
 
 
+def _set_session_cookie(response: Response, identity: Identity, days: int) -> SessionOut:
+    token = create_session_token(identity, days, settings)
+    response.set_cookie(
+        key=settings.session_cookie_name,
+        value=token,
+        max_age=days * 24 * 60 * 60,
+        httponly=True,
+        secure=settings.session_secure,
+        samesite="lax",
+        path="/",
+    )
+    expires_at = current_utc() + timedelta(days=days)
+    return SessionOut(user_id=identity.id, name=identity.name, role=identity.role, expires_at=expires_at)
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok", "provider": settings.document_ai_provider}
+
+
+@app.get("/api/auth/session", response_model=SessionOut)
+def auth_session(identity: Identity = Depends(current_identity)):
+    return SessionOut(user_id=identity.id, name=identity.name, role=identity.role, expires_at=identity.expires_at)
+
+
+@app.post("/api/auth/login", response_model=SessionOut)
+def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
+    pin = payload.pin.strip()
+    pin_hash = hash_password(pin)
+    matches = db.scalars(select(UserAccount).where(UserAccount.pin_hash == pin_hash, UserAccount.is_active.is_(True))).all()
+    if len(matches) == 0:
+        raise HTTPException(401, "Neplatný PIN.")
+    if len(matches) > 1:
+        raise HTTPException(409, "PIN není jednoznačný. Kontaktujte správce systému.")
+
+    user = matches[0]
+    if user.role == "owner" and len(pin) < 6:
+        raise HTTPException(500, "PIN jednatele je v konfiguraci neplatný.")
+    if user.role == "employee" and len(pin) != 4:
+        raise HTTPException(500, "PIN řidiče je v konfiguraci neplatný.")
+
+    identity = Identity(id=user.user_id, name=user.name, role=user.role, expires_at=current_utc())
+    days = settings.owner_session_days if user.role == "owner" else settings.employee_session_days
+    response.headers["Cache-Control"] = "no-store"
+    return _set_session_cookie(response, identity, days)
+
+
+@app.post("/api/auth/logout")
+def logout(response: Response):
+    response.delete_cookie(key=settings.session_cookie_name, path="/")
+    return {"status": "ok"}
+
+
+@app.get("/api/employees", response_model=list[EmployeeOut])
+def list_employees(_identity: Identity = Depends(owner_only), db: Session = Depends(get_db)):
+    query = select(UserAccount).where(UserAccount.role == "employee", UserAccount.is_active.is_(True)).order_by(UserAccount.created_at.desc())
+    return db.scalars(query).all()
+
+
+@app.post("/api/employees", response_model=EmployeeOut, status_code=201)
+def create_employee(payload: EmployeeCreateRequest, _identity: Identity = Depends(owner_only), db: Session = Depends(get_db)):
+    pin_hash = hash_password(payload.pin)
+    existing_pin = db.scalar(select(UserAccount).where(UserAccount.pin_hash == pin_hash, UserAccount.is_active.is_(True)))
+    if existing_pin:
+        raise HTTPException(409, "Tento PIN už používá jiný účet.")
+
+    base_id = normalize_employee_id(payload.name) or "ridic"
+    candidate = base_id
+    suffix = 2
+    while db.scalar(select(UserAccount.id).where(UserAccount.user_id == candidate)):
+        candidate = f"{base_id}-{suffix}"
+        suffix += 1
+
+    employee = UserAccount(user_id=candidate, name=payload.name.strip(), role="employee", pin_hash=pin_hash, is_active=True)
+    db.add(employee)
+    db.commit()
+    db.refresh(employee)
+    return employee
 
 
 @app.get("/api/dashboard")

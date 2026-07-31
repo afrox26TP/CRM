@@ -1,27 +1,21 @@
-from dataclasses import dataclass
-from typing import Annotated
+from fastapi import Depends, HTTPException, Request
 
-from fastapi import Depends, Header, HTTPException
-
-
-@dataclass(frozen=True)
-class Identity:
-    name: str
-    role: str
+from .config import get_settings
+from .identity import Identity
+from .security import parse_session_token
 
 
 def current_identity(
-    x_user_id: Annotated[str | None, Header()] = None,
-    x_user_role: Annotated[str | None, Header()] = None,
+    request: Request,
 ) -> Identity:
-    """Development identity boundary; replace headers with verified OIDC claims in production."""
-    names = {"vratislav": "Vratislav", "petr-novak": "Petr Novák", "milan-dvorak": "Milan Dvořák", "jan-svoboda": "Jan Svoboda"}
-    if not x_user_id or x_user_id not in names or x_user_role not in {"owner", "employee"}:
+    settings = get_settings()
+    session_token = request.cookies.get(settings.session_cookie_name)
+    if not session_token:
         raise HTTPException(401, "Pro tuto operaci je nutné přihlášení.")
-    return Identity(name=names[x_user_id], role=x_user_role)
+    return parse_session_token(session_token, settings)
 
 
 def owner_only(identity: Identity = Depends(current_identity)) -> Identity:
-    if identity.role != "owner" or identity.name.casefold() != "vratislav":
-        raise HTTPException(403, "Tato část je přístupná pouze jednateli Vratislavovi.")
+    if identity.role != "owner":
+        raise HTTPException(403, "Tato část je přístupná pouze jednateli.")
     return identity

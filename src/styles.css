@@ -1,5 +1,21 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap');
 
+.login-shell { min-height: 100vh; display: grid; place-items: center; padding: 28px; background: radial-gradient(circle at 8% 10%, #dff2e9 0%, #f3f6f4 38%); }
+.login-card { width: min(460px, 100%); padding: 32px; border: 1px solid #dde6e1; border-radius: 14px; background: #fff; box-shadow: 0 18px 45px #173d2a1f; }
+.login-brand { padding: 0; margin-bottom: 10px; color: #123a2a; }
+.login-card h1 { margin: 8px 0 18px; font: 800 30px 'Manrope'; letter-spacing: -.6px; }
+.login-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.login-tabs button { min-height: 38px; color: #586760; border: 1px solid #d6dfda; border-radius: 8px; background: #f8faf9; font-weight: 600; }
+.login-tabs button.active { color: #14553a; border-color: #a7cfba; background: #eaf6ef; }
+.login-form { display: flex; flex-direction: column; gap: 12px; }
+.login-form label { display: flex; flex-direction: column; gap: 6px; color: #617068; font-size: 10px; font-weight: 700; }
+.login-form input, .login-form select { min-height: 40px; padding: 0 12px; border: 1px solid #d8e1dc; border-radius: 8px; }
+.login-form input:focus, .login-form select:focus { border-color: #56a57e; outline: none; box-shadow: 0 0 0 3px #56a57e19; }
+.login-pin { min-height: 64px !important; padding: 0 16px !important; font-size: 30px; font-weight: 700; letter-spacing: 5px; text-align: center; }
+.remember { flex-direction: row !important; align-items: center; gap: 8px !important; font-size: 11px !important; font-weight: 600 !important; }
+.remember input { min-height: auto; width: 15px; height: 15px; margin: 0; }
+.login-form small { color: #8f9b96; font-size: 10px; }
+
 /* Restricted employee portal */
 .employee-shell { min-height: 100vh; background: #f3f6f4; }
 .employee-header { position: sticky; top: 0; z-index: 20; height: 76px; padding: 0 max(24px, calc((100vw - 1080px) / 2)); background: #102d22; border: 0; box-shadow: 0 3px 18px #0b241a24; }

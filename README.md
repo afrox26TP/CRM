@@ -24,7 +24,12 @@ Interní webový portál pro automatické zpracování CMR, faktur a účtenek. 
 | Vratislav — jednatel | dashboard, všechny doklady, přepravy, opravy, importy, účetnictví a nastavení |
 | Zaměstnanec | nahrání fotografie/PDF a pouze vlastní výpis za zvolené období |
 
-V lokálním MVP se role přepíná kliknutím na profil a backend ji kontroluje pomocí demonstračních hlaviček. Jde o vývojovou simulaci, nikoli produkční přihlášení. Před nasazením musí hlavičky nahradit serverem ověřené SSO/OIDC tokeny; klient nesmí mít možnost roli sám měnit.
+Aktuálně je implementované skutečné přihlášení přes `HttpOnly` session cookie a jednotný PIN login:
+
+- uživatel zadá pouze PIN, systém automaticky určí profil,
+- **Jednatel (Vratislav):** PIN s délkou minimálně 6 číslic,
+- **Řidič kamionu:** PIN s délkou přesně 4 číslice,
+- řidiče přidává jednatel v aplikaci (Nastavení) zadáním jména a PINu,
 
 ## Architektura a tok dat
 
@@ -73,6 +78,24 @@ API poběží na `http://127.0.0.1:8001`, dokumentace API na `http://127.0.0.1:8
 
 Úloha VS Code **DokladFlow: spustit vše** spustí obě části na portech 5174 a 8001. Úloha **DokladFlow: ověřit projekt** provede lint, produkční sestavení a backendové testy.
 
+## Nastavení přihlášení
+
+V `backend/.env` nastavte minimálně:
+
+```dotenv
+OWNER_NAME=Vratislav
+OWNER_PIN=629911
+OWNER_SESSION_DAYS=1
+EMPLOYEE_SESSION_DAYS=30
+SESSION_COOKIE_NAME=dokladflow_session
+SESSION_SECURE=false
+SESSION_SIGNING_KEY=dokladflow-dev-signing-key
+```
+
+Poznámka:
+- v produkci nastavte `SESSION_SECURE=true` (HTTPS),
+- PINy jsou jen MVP varianta; dlouhodobě je vhodné SSO/OIDC nebo magic link/OTP.
+
 ## Google Cloud Document AI
 
 1. V Google Cloud projektu aktivujte Document AI API.
@@ -117,6 +140,11 @@ Opakovaný import aktualizuje existující přepravu podle normalizovaného čí
 | Metoda | Cesta | Účel |
 |---|---|---|
 | `GET` | `/api/health` | stav backendu a AI provideru |
+| `POST` | `/api/auth/login` | přihlášení pouze PINem, profil se určí automaticky |
+| `GET` | `/api/auth/session` | načtení aktivní session |
+| `POST` | `/api/auth/logout` | odhlášení |
+| `GET` | `/api/employees` | seznam řidičů (jen jednatel) |
+| `POST` | `/api/employees` | přidání řidiče: jméno + 4místný PIN |
 | `GET` | `/api/dashboard` | metriky a vytížení týmu |
 | `GET` | `/api/documents` | filtrovaná fronta dokladů |
 | `GET` | `/api/me/documents` | vlastní výpis přihlášeného zaměstnance |
@@ -141,7 +169,7 @@ Aktuální automatické testy ověřují normalizaci CMR, seed databáze, API fr
 
 1. **Účetní program:** nyní se exportuje univerzální CSV se středníkem a UTF-8 BOM. Po určení programu (např. Pohoda, Money S3, Helios) se doplní jeho přesné schéma nebo API.
 2. **Vstup od řidičů:** webový upload je hotový základ; WhatsApp, e-mail nebo mobilní aplikace vyžadují samostatnou integrační bránu.
-3. **Přihlášení a role:** demonstrační hlavičky nahradit SSO/OIDC; identity a role musí vydávat důvěryhodný server/IdP.
+3. **Přihlášení a role:** aktuální řešení je interní cookie session. Pro produkci doporučeno nahradit SSO/OIDC.
 4. **Úložiště:** lokální disk nahradit Cloud Storage a nastavit šifrování, retenční dobu a zálohy.
 5. **Zpracování:** OCR přesunout do fronty úloh, přidat retry, monitoring a dead-letter queue.
 6. **Databáze:** pro více uživatelů použít PostgreSQL a databázové migrace Alembic.

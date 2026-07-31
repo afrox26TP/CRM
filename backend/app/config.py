@@ -13,6 +13,13 @@ class Settings(BaseSettings):
     google_cloud_project: str = ""
     google_cloud_location: str = "eu"
     google_document_ai_processor_id: str = ""
+    owner_name: str = "Vratislav"
+    owner_pin: str = "629911"
+    owner_session_days: int = 1
+    employee_session_days: int = 30
+    session_cookie_name: str = "dokladflow_session"
+    session_secure: bool = False
+    session_signing_key: str = "dokladflow-dev-signing-key"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
