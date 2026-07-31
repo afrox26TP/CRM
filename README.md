@@ -1,4 +1,4 @@
-# DokladFlow
+# Conpath CRM
 
 Interní webový portál pro automatické zpracování CMR, faktur a účtenek. Celý dashboard a firemní data vidí pouze jednatel **Vratislav**. Zaměstnanec může pouze nahrávat vlastní fotografie a zobrazit svůj vlastní výpis za zvolené období.
 
@@ -13,9 +13,7 @@ Interní webový portál pro automatické zpracování CMR, faktur a účtenek. 
 - poskytnout Vratislavovi souhrnný dashboard, fronty, kontrolu a účetní export,
 - omezit zaměstnance na nahrávání a osobní časově filtrovaný výpis,
 - vést audit změn a exportovat schválené náklady do českého CSV,
-- spustit se bez cloudových přístupů v deterministickém demonstračním režimu.
-
-> Důležité: lokální režim `mock` neprovádí skutečné OCR. Slouží jen k demonstraci celého toku. Pro reálné dokumenty nastavte Google Document AI.
+- zálohovat nahrané dokumenty do Google Cloud Storage.
 
 ## Přístupy a role
 
@@ -37,11 +35,12 @@ Aktuálně je implementované skutečné přihlášení přes `HttpOnly` session
 Telefon řidiče ─┐
                  ├─> FastAPI ─> Google Document AI ─> vytěžená data
 Excel Konsped ──┘      │                                  │
+                    Google Cloud Storage <── záloha souborů
                        └──────── párování CMR <───────────┘
                                       │
                              pravidla přiřazení
                          ┌────────────┼────────────┐
-                       Tonda        Karel        Jarda
+                        řidiči přidaní jednatelem
                          └────────────┼────────────┘
                                účetní CSV export
 ```
@@ -49,8 +48,8 @@ Excel Konsped ──┘      │                                  │
 - **Frontend:** React, JavaScript, Vite, vlastní responzivní CSS
 - **Backend:** Python, FastAPI, SQLAlchemy
 - **Lokální databáze:** SQLite; přes `DATABASE_URL` lze přepnout na PostgreSQL
-- **OCR/AI:** Google Cloud Document AI nebo lokální `mock`
-- **Soubory:** lokální adresář `backend/storage` pro vývoj
+- **OCR/AI:** Google Cloud Document AI
+- **Soubory:** lokální adresář `backend/storage` + volitelná záloha do Google Cloud Storage
 
 ## Lokální spuštění ve Windows
 
@@ -61,7 +60,7 @@ npm install
 npm run dev
 ```
 
-Aplikace standardně použije port `5173`. V aktuálním pracovním prostředí je port obsazený jinou službou, proto DokladFlow běží na `http://127.0.0.1:5174`.
+Aplikace standardně použije port `5173`. V aktuálním pracovním prostředí je port obsazený jinou službou, proto Conpath CRM běží na `http://127.0.0.1:5174`.
 
 ### 2. Backend
 
@@ -96,7 +95,22 @@ Poznámka:
 - v produkci nastavte `SESSION_SECURE=true` (HTTPS),
 - PINy jsou jen MVP varianta; dlouhodobě je vhodné SSO/OIDC nebo magic link/OTP.
 
-## Google Cloud Document AI
+## Google Cloud Setup (Document AI + Storage + Hosting)
+
+### 1. Vytvoření projektu a API
+
+1. V Google Cloud vytvořte projekt.
+2. Zapněte API: `Document AI API`, `Cloud Storage API`, `Cloud Run Admin API`, `Cloud SQL Admin API`.
+3. Vytvořte service account pro backend (např. `conpath-crm-backend`).
+
+### 2. IAM role pro backend service account
+
+- `roles/documentai.apiUser`
+- `roles/storage.objectAdmin` (nebo jemnější oprávnění na konkrétní bucket)
+- `roles/cloudsql.client` (pokud backend běží proti Cloud SQL)
+- `roles/secretmanager.secretAccessor` (pokud budete držet tajné údaje v Secret Manageru)
+
+### 3. Document AI processor
 
 1. V Google Cloud projektu aktivujte Document AI API.
 2. V regionu `eu` vytvořte processor. Pro produkci je vhodný vlastní classifier/extractor s entitami níže; pro faktury lze využít Invoice Parser.
@@ -110,7 +124,38 @@ GOOGLE_CLOUD_PROJECT=vas-projekt
 GOOGLE_CLOUD_LOCATION=eu
 GOOGLE_DOCUMENT_AI_PROCESSOR_ID=id-processoru
 GOOGLE_APPLICATION_CREDENTIALS=C:\bezpecna\cesta\service-account.json
+GOOGLE_CLOUD_STORAGE_BUCKET=vas-bucket
+GOOGLE_CLOUD_STORAGE_PREFIX=doklady
+GOOGLE_CLOUD_STORAGE_BACKUP_REQUIRED=true
 ```
+
+Poznámka k záloze:
+- `GOOGLE_CLOUD_STORAGE_BUCKET`: pokud je vyplněný, každý nahraný dokument se uloží i do GCS,
+- `GOOGLE_CLOUD_STORAGE_BACKUP_REQUIRED=true`: při selhání zálohy upload skončí chybou (doporučeno pro produkci),
+- `GOOGLE_CLOUD_STORAGE_BACKUP_REQUIRED=false`: při selhání zálohy pokračuje lokální upload.
+
+### 4. Hosting frontendu a backendu
+
+Doporučený setup:
+
+- Frontend (React/Vite): `Firebase Hosting` nebo statický Cloud Run/Nginx image
+- Backend (FastAPI): `Cloud Run`
+- Databáze: `Cloud SQL for PostgreSQL`
+
+Minimální produkční tok:
+
+1. Frontend build: `npm run build`
+2. Backend image build a deploy na Cloud Run
+3. Nastavení env varů v Cloud Run (`DOCUMENT_AI_PROVIDER=google`, GCS bucket, DB URL)
+4. CORS na produkční doménu frontendu
+
+### 5. Databáze v Google Cloud
+
+Ano, Google Cloud hostuje databáze nativně.
+
+- `Cloud SQL` (PostgreSQL/MySQL/SQL Server) je vhodná volba pro tento projekt.
+- Alternativa pro vyšší výkon PostgreSQL: `AlloyDB`.
+- NoSQL varianta: `Firestore`.
 
 Backend očekává entity:
 
@@ -177,4 +222,4 @@ Aktuální automatické testy ověřují normalizaci CMR, seed databáze, API fr
 
 ## Stav MVP
 
-Frontend i backend jsou sestavitelné, API má demonstrační data a aplikace funguje bez externích přístupů. Skutečná kvalita vytěžení závisí na natrénovaném Google Document AI processoru a reprezentativních vzorcích firemních dokladů.
+Frontend i backend jsou sestavitelné a připravené na provoz s Google Cloud Document AI a Google Cloud Storage. Kvalita vytěžení závisí na správně natrénovaném processoru a reprezentativních vzorcích firemních dokladů.

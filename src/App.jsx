@@ -5,6 +5,7 @@ import {
   LayoutDashboard, Menu, Plus, ReceiptText, RefreshCw, Search, Settings,
   Sparkles, Truck, Upload, Users, X,
 } from 'lucide-react'
+import brandLogo from './assets/crm-logo.png'
 
 const API = import.meta.env.VITE_API_URL || '/api'
 const statusMeta = {
@@ -12,6 +13,10 @@ const statusMeta = {
   needs_review: ['Ke kontrole', 'warning'], approved: ['Schváleno', 'success'], exported: ['Exportováno', 'violet'],
 }
 const typeMeta = { cmr: ['CMR', 'blue'], tax: ['Daňový doklad', 'orange'], unknown: ['Nerozpoznáno', 'neutral'] }
+
+function BrandLogo() {
+  return <span className="brand-mark"><img src={brandLogo} alt="Conpath logo" className="brand-logo-full" /></span>
+}
 
 const money = (value, currency = 'CZK') => value == null ? '—' : new Intl.NumberFormat('cs-CZ', { style: 'currency', currency, maximumFractionDigits: 2 }).format(Number(value))
 const dateValue = (value) => value ? new Intl.DateTimeFormat('cs-CZ').format(new Date(value)) : '—'
@@ -48,7 +53,7 @@ function LoginGate({ onLoggedIn }) {
     finally { setBusy(false) }
   }
 
-  return <div className="login-shell"><section className="login-card"><div className="brand login-brand"><span className="brand-mark"><FileCheck2 size={22} /></span><span>Doklad<b>Flow</b></span></div><div className="login-form"><input className="login-pin" type="password" inputMode="numeric" pattern="[0-9]*" value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))} placeholder="Zadejte PIN" /><button className="primary" disabled={!pin || busy} onClick={submit}>{busy ? 'Přihlašuji…' : 'Přihlásit'}</button></div>{error && <div className="error-box"><AlertTriangle size={17} />{error}</div>}</section></div>
+  return <div className="login-shell"><section className="login-card"><div className="brand login-brand"><BrandLogo /></div><div className="login-form"><input className="login-pin" type="password" inputMode="numeric" pattern="[0-9]*" value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))} placeholder="Zadejte PIN" /><button className="primary" disabled={!pin || busy} onClick={submit}>{busy ? 'Přihlašuji…' : 'Přihlásit'}</button></div>{error && <div className="error-box"><AlertTriangle size={17} />{error}</div>}</section></div>
 }
 
 function Badge({ value, map }) {
@@ -64,7 +69,7 @@ function Sidebar({ active, onChange, open, onClose, onLogout }) {
   return <>
     {open && <button className="sidebar-scrim" onClick={onClose} aria-label="Zavřít nabídku" />}
     <aside className={`sidebar ${open ? 'is-open' : ''}`}>
-      <div className="brand"><span className="brand-mark"><FileCheck2 size={22} /></span><span>Doklad<b>Flow</b></span></div>
+      <div className="brand"><BrandLogo /></div>
       <nav aria-label="Hlavní navigace">
         <p className="nav-caption">Pracovní prostor</p>
         {items.map(([id, Icon, label]) => <button key={id} className={active === id ? 'active' : ''} onClick={() => { onChange(id); onClose() }}><Icon size={19} />{label}</button>)}
@@ -78,7 +83,7 @@ function Sidebar({ active, onChange, open, onClose, onLogout }) {
 }
 
 function Header({ title, onMenu, onUpload }) {
-  return <header><button className="icon-button mobile-menu" onClick={onMenu}><Menu /></button><div><p>DokladFlow / {title}</p><h1>{title}</h1></div><div className="header-actions"><button className="icon-button" aria-label="Obnovit" onClick={() => location.reload()}><RefreshCw size={18} /></button><button className="primary" onClick={onUpload}><Plus size={18} />Nahrát doklady</button></div></header>
+  return <header><button className="icon-button mobile-menu" onClick={onMenu}><Menu /></button><div><p>Sekce</p><h1>{title}</h1></div><div className="header-actions"><button className="icon-button" aria-label="Obnovit" onClick={() => location.reload()}><RefreshCw size={18} /></button><button className="primary" onClick={onUpload}><Plus size={18} />Nahrát doklady</button></div></header>
 }
 
 function Metric({ icon: Icon, label, value, note, tone, progress }) {
@@ -194,7 +199,7 @@ function EmployeePortal({ session, onLogout }) {
   const firstName = (session.name || 'Řidič').split(' ')[0]
 
   return <div className="employee-shell">
-    <header className="employee-header"><div className="brand employee-brand"><span className="brand-mark"><FileCheck2 size={22} /></span><span>Doklad<b>Flow</b></span></div><button className="employee-profile" onClick={onLogout}><span>{session.name?.split(' ').map(v => v[0]).join('') || 'RK'}</span><div><strong>{session.name || 'Řidič'}</strong><small>Řidič kamionu · odhlásit</small></div><ChevronDown size={16} /></button></header>
+    <header className="employee-header"><div className="brand employee-brand"><BrandLogo /></div><button className="employee-profile" onClick={onLogout}><span>{session.name?.split(' ').map(v => v[0]).join('') || 'RK'}</span><div><strong>{session.name || 'Řidič'}</strong><small>Řidič kamionu · odhlásit</small></div><ChevronDown size={16} /></button></header>
     <main className="employee-main"><section className="employee-welcome"><div><span className="eyebrow"><CheckCircle2 size={14} /> Osobní prostor</span><h1>Dobrý den, {firstName}</h1><p>Nahrajte fotografie dokladů a zkontrolujte svůj vlastní výpis.</p></div><button className="employee-upload" onClick={() => setUpload(true)}><Upload size={26} /><span><strong>Nahrát fotografie</strong><small>JPG, PNG, WebP nebo PDF</small></span><ArrowRight size={20} /></button></section>
       <section className="panel employee-statement"><div className="panel-heading employee-heading"><div><h3>Můj výpis dokladů</h3><p>Vidíte pouze dokumenty, které jste nahrál vy.</p></div><div className="date-range"><label>Od<input type="date" value={range.from} onChange={e => setRange({ ...range, from: e.target.value })} /></label><label>Do<input type="date" value={range.to} onChange={e => setRange({ ...range, to: e.target.value })} /></label></div></div>
         {error && <div className="api-warning"><AlertTriangle /><div><strong>Výpis nelze načíst</strong><span>{error}</span></div></div>}
@@ -255,6 +260,7 @@ export default function App() {
     finally {
       setSession(null)
       setPage('dashboard')
+      setDriver('Všichni')
       setSelected(null)
       setUpload(null)
     }
@@ -281,7 +287,7 @@ export default function App() {
   }, [page, dashboard, documents, transports, loading, filters, exportAccounting, employees, load])
 
   if (authLoading) return <div className="loading"><RefreshCw /> Ověřuji přihlášení…</div>
-  if (!session) return <LoginGate onLoggedIn={(payload) => { setSession(payload); setPage('dashboard') }} />
+  if (!session) return <LoginGate onLoggedIn={(payload) => { setSession(payload); setPage('dashboard'); setDriver('Všichni') }} />
   if (session.role === 'employee') return <EmployeePortal session={session} onLogout={logout} />
 
   return <div className="app-shell"><Sidebar active={page} onChange={setPage} open={menu} onClose={() => setMenu(false)} onLogout={logout} /><main><Header title={titles[page]} onMenu={() => setMenu(true)} onUpload={() => setUpload('documents')} /><div className="dispatcher-tabs"><span>Řidič:</span>{ownerDrivers.map(name => <button key={name} className={driver === name ? 'active' : ''} onClick={() => setDriver(name)}>{name}{name !== 'Všichni' && <b>{dashboard.by_dispatcher?.[name] || 0}</b>}</button>)}</div><div className="content">{error && <div className="api-warning"><AlertTriangle /><div><strong>Backend není dostupný</strong><span>{error} Spusťte FastAPI server podle README.</span></div><button onClick={load}>Zkusit znovu</button></div>}{content}</div></main>{upload && <UploadModal mode={upload} onClose={() => setUpload(null)} onDone={completeModal} />}{selected && <DetailDrawer document={selected} employees={employees} onClose={() => setSelected(null)} onSaved={completeDrawer} />}</div>

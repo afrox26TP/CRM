@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from .auth import Identity, current_identity, owner_only
 from .config import get_settings
 from .database import Base, SessionLocal, engine, get_db
-from .models import AssignmentRule, AuditEvent, Document, Transport, UserAccount
+from .models import AuditEvent, Document, Transport, UserAccount
 from .schemas import (
     DocumentOut,
     DocumentUpdate,
@@ -30,6 +30,7 @@ from .schemas import (
     TransportOut,
 )
 from .security import create_session_token, current_utc, hash_password, normalize_employee_id
+from .services.cloud_backup import CloudBackupError, backup_timestamp_iso, upload_document_backup
 from .services.document_ai import DocumentExtractionError, extract_document
 from .services.matching import assign_dispatcher, find_transport, normalize
 
@@ -49,31 +50,6 @@ def _seed(db: Session) -> None:
         owner.role = "owner"
         owner.is_active = True
 
-    if not db.scalar(select(func.count(Transport.id))):
-        transports = [
-            Transport(cmr_number="CMR-2026-001", cmr_normalized=normalize("CMR-2026-001"), transport_date=date(2026, 7, 28), driver_name="Petr Novák", license_plate="8AB 1234", route="Praha → Hamburg", transport_price=Decimal("28500"), currency="CZK", dispatcher="Tonda"),
-            Transport(cmr_number="CMR-2026-002", cmr_normalized=normalize("CMR-2026-002"), transport_date=date(2026, 7, 29), driver_name="Milan Dvořák", license_plate="5AX 7788", route="Brno → Vídeň", transport_price=Decimal("920"), currency="EUR", dispatcher="Karel"),
-            Transport(cmr_number="CMR-2026-003", cmr_normalized=normalize("CMR-2026-003"), transport_date=date(2026, 7, 30), driver_name="Jan Svoboda", license_plate="9AC 4210", route="Ostrava → Katovice", transport_price=Decimal("14600"), currency="CZK", dispatcher="Jarda"),
-            Transport(cmr_number="CMR-2026-004", cmr_normalized=normalize("CMR-2026-004"), transport_date=date(2026, 7, 31), driver_name="Petr Novák", license_plate="8AB 1234", route="Hamburg → Praha", transport_price=Decimal("30100"), currency="CZK", dispatcher="Tonda"),
-            Transport(cmr_number="CMR-2026-005", cmr_normalized=normalize("CMR-2026-005"), transport_date=date(2026, 8, 1), driver_name="Milan Dvořák", license_plate="5AX 7788", route="Brno → Bratislava", transport_price=Decimal("17800"), currency="CZK", dispatcher="Karel"),
-            Transport(cmr_number="CMR-2026-006", cmr_normalized=normalize("CMR-2026-006"), transport_date=date(2026, 8, 2), driver_name="Jan Svoboda", license_plate="9AC 4210", route="Praha → Drážďany", transport_price=Decimal("795"), currency="EUR", dispatcher="Jarda"),
-        ]
-        db.add_all(transports)
-        db.flush()
-        demo_documents = [
-            Document(original_name="CMR_2026_001.jpg", stored_name="demo-cmr-001.jpg", mime_type="image/jpeg", document_type="cmr", status="matched", cmr_number="CMR-2026-001", confidence=Decimal("0.97"), uploaded_by="Petr Novák", dispatcher="Tonda", transport_id=transports[0].id),
-            Document(original_name="PHM_Benzina_28-07.jpg", stored_name="demo-phm-001.jpg", mime_type="image/jpeg", document_type="tax", status="needs_review", issue_date=date(2026, 7, 28), supplier="ORLEN Unipetrol RPA s.r.o.", net_amount=Decimal("4049.59"), vat_amount=Decimal("850.41"), vat_rate=Decimal("21"), gross_amount=Decimal("4900"), confidence=Decimal("0.88"), uploaded_by="Petr Novák", dispatcher="Tonda"),
-            Document(original_name="CMR_2026_002.pdf", stored_name="demo-cmr-002.pdf", mime_type="application/pdf", document_type="cmr", status="approved", cmr_number="CMR-2026-002", confidence=Decimal("0.98"), uploaded_by="Milan Dvořák", dispatcher="Karel", transport_id=transports[1].id),
-            Document(original_name="Uctenka_Shell.jpg", stored_name="demo-phm-002.jpg", mime_type="image/jpeg", document_type="tax", status="approved", issue_date=date(2026, 7, 29), supplier="Shell Czech Republic a.s.", net_amount=Decimal("2578.51"), vat_amount=Decimal("541.49"), vat_rate=Decimal("21"), gross_amount=Decimal("3120"), confidence=Decimal("0.95"), uploaded_by="Milan Dvořák", dispatcher="Karel"),
-            Document(original_name="CMR_necitelne.jpg", stored_name="demo-cmr-review.jpg", mime_type="image/jpeg", document_type="cmr", status="needs_review", cmr_number="CMR-2026-099", confidence=Decimal("0.61"), uploaded_by="Jan Svoboda", dispatcher="Jarda"),
-        ]
-        db.add_all(demo_documents)
-    if not db.scalar(select(func.count(AssignmentRule.id))):
-        db.add_all([
-            AssignmentRule(field="license_plate", pattern="8AB1234", dispatcher="Tonda", priority=10),
-            AssignmentRule(field="license_plate", pattern="5AX7788", dispatcher="Karel", priority=10),
-            AssignmentRule(field="license_plate", pattern="9AC4210", dispatcher="Jarda", priority=10),
-        ])
     db.commit()
 
 
@@ -86,20 +62,10 @@ async def lifespan(_: FastAPI):
     settings.storage_path.mkdir(parents=True, exist_ok=True)
     with SessionLocal() as db:
         _seed(db)
-        legacy_uploaders = {
-            "demo-cmr-001.jpg": "Petr Novák", "demo-phm-001.jpg": "Petr Novák",
-            "demo-cmr-002.pdf": "Milan Dvořák", "demo-phm-002.jpg": "Milan Dvořák",
-            "demo-cmr-review.jpg": "Jan Svoboda",
-        }
-        for stored_name, employee in legacy_uploaders.items():
-            document = db.scalar(select(Document).where(Document.stored_name == stored_name))
-            if document and document.uploaded_by == "Neznámý zaměstnanec":
-                document.uploaded_by = employee
-        db.commit()
     yield
 
 
-app = FastAPI(title="DokladFlow API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Conpath CRM API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -306,11 +272,27 @@ async def upload_documents(
         suffix = Path(upload.filename or "document").suffix.lower()
         stored_name = f"{uuid.uuid4().hex}{suffix}"
         (settings.storage_path / stored_name).write_bytes(content)
-        assigned_dispatcher = dispatcher if identity.role == "owner" else None
+        try:
+            backup_uri = upload_document_backup(settings, stored_name, content_type, content)
+        except CloudBackupError as exc:
+            if settings.google_cloud_storage_backup_required:
+                raise HTTPException(502, str(exc)) from exc
+            backup_uri = None
+        assigned_dispatcher = dispatcher if identity.role == "owner" else identity.name
         document = Document(original_name=upload.filename or stored_name, stored_name=stored_name, mime_type=content_type, status="processing", dispatcher=assigned_dispatcher, uploaded_by=identity.name)
         db.add(document)
         db.flush()
-        _audit(db, document, "uploaded", identity.name)
+        _audit(
+            db,
+            document,
+            "uploaded",
+            identity.name,
+            {
+                "backup_uri": backup_uri,
+                "backup_required": settings.google_cloud_storage_backup_required,
+                "backup_timestamp": backup_timestamp_iso() if backup_uri else None,
+            },
+        )
         try:
             result = extract_document(settings, document.original_name, content_type, content)
             for field in ("document_type", "confidence", "cmr_number", "issue_date", "supplier", "net_amount", "vat_amount", "vat_rate", "gross_amount"):

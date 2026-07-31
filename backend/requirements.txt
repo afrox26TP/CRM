@@ -6,6 +6,7 @@ python-multipart>=0.0.20,<1
 pandas>=2.2,<3
 openpyxl>=3.1,<4
 google-cloud-documentai>=3.3,<4
+google-cloud-storage>=2.18,<3
 python-dateutil>=2.9,<3
 pytest>=8.3,<9
 httpx>=0.28,<1

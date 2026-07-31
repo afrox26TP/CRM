@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     google_cloud_project: str = ""
     google_cloud_location: str = "eu"
     google_document_ai_processor_id: str = ""
+    google_cloud_storage_bucket: str = ""
+    google_cloud_storage_prefix: str = "doklady"
+    google_cloud_storage_backup_required: bool = False
     owner_name: str = "Vratislav"
     owner_pin: str = "629911"
     owner_session_days: int = 1
