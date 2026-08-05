@@ -49,7 +49,7 @@ Excel Konsped ──┘      │                                  │
 - **Backend:** Python, FastAPI, SQLAlchemy
 - **Lokální databáze:** SQLite; přes `DATABASE_URL` lze přepnout na PostgreSQL
 - **OCR/AI:** Google Cloud Document AI
-- **Soubory:** lokální adresář `backend/storage` + volitelná záloha do Google Cloud Storage
+- **Soubory:** lokální adresář `backend/storage` ve vývoji, Google Cloud Storage v produkci
 
 ## Lokální spuštění ve Windows
 
@@ -93,6 +93,7 @@ SESSION_SIGNING_KEY=dokladflow-dev-signing-key
 
 Poznámka:
 - v produkci nastavte `SESSION_SECURE=true` (HTTPS),
+- při přepisu API přes Firebase Hosting nastavte `SESSION_COOKIE_NAME=__session`, protože Hosting ostatní cookies backendu nepředává,
 - PINy jsou jen MVP varianta; dlouhodobě je vhodné SSO/OIDC nebo magic link/OTP.
 
 ## Google Cloud Setup (Document AI + Storage + Hosting)
@@ -115,7 +116,7 @@ Poznámka:
 1. V Google Cloud projektu aktivujte Document AI API.
 2. V regionu `eu` vytvořte processor. Pro produkci je vhodný vlastní classifier/extractor s entitami níže; pro faktury lze využít Invoice Parser.
 3. Service accountu přidělte minimálně roli pro zpracování dokumentů.
-4. Stáhněte JSON klíč mimo repozitář.
+4. Pro lokální vývoj použijte `gcloud auth application-default login`. Cloud Run používá přidělený service account bez JSON klíče.
 5. V `backend/.env` nastavte:
 
 ```dotenv
@@ -123,16 +124,11 @@ DOCUMENT_AI_PROVIDER=google
 GOOGLE_CLOUD_PROJECT=vas-projekt
 GOOGLE_CLOUD_LOCATION=eu
 GOOGLE_DOCUMENT_AI_PROCESSOR_ID=id-processoru
-GOOGLE_APPLICATION_CREDENTIALS=C:\bezpecna\cesta\service-account.json
 GOOGLE_CLOUD_STORAGE_BUCKET=vas-bucket
 GOOGLE_CLOUD_STORAGE_PREFIX=doklady
-GOOGLE_CLOUD_STORAGE_BACKUP_REQUIRED=true
 ```
 
-Poznámka k záloze:
-- `GOOGLE_CLOUD_STORAGE_BUCKET`: pokud je vyplněný, každý nahraný dokument se uloží i do GCS,
-- `GOOGLE_CLOUD_STORAGE_BACKUP_REQUIRED=true`: při selhání zálohy upload skončí chybou (doporučeno pro produkci),
-- `GOOGLE_CLOUD_STORAGE_BACKUP_REQUIRED=false`: při selhání zálohy pokračuje lokální upload.
+Pokud je `GOOGLE_CLOUD_STORAGE_BUCKET` vyplněný, Cloud Storage je primární úložiště a při selhání zápisu upload skončí chybou. Bez bucketu se používá lokální adresář pro vývoj a testy.
 
 ### 4. Hosting frontendu a backendu
 

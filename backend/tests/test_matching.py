@@ -1,3 +1,4 @@
+from app.services.document_ai import _cmr_number_from_text
 from app.services.matching import normalize
 
 
@@ -11,3 +12,7 @@ def test_normalize_handles_czech_diacritics_and_case():
 
 def test_normalize_empty_value():
     assert normalize(None) == ""
+
+
+def test_cmr_number_is_extracted_from_ocr_text():
+    assert _cmr_number_from_text("Mezinárodní nákladní list\nCMR číslo: 2026-00187") == "2026-00187"

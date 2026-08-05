@@ -30,7 +30,7 @@ from .schemas import (
     TransportOut,
 )
 from .security import create_session_token, current_utc, hash_password, normalize_employee_id
-from .services.cloud_backup import CloudBackupError, backup_timestamp_iso, upload_document_backup
+from .services.cloud_backup import CloudBackupError, backup_timestamp_iso, delete_stored_document, store_document
 from .services.document_ai import DocumentExtractionError, extract_document
 from .services.matching import assign_dispatcher, find_transport, normalize
 
@@ -268,9 +268,10 @@ def delete_document(document_id: int, _identity: Identity = Depends(owner_only),
     if not document:
         raise HTTPException(404, "Doklad nebyl nalezen.")
 
-    stored_path = settings.storage_path / document.stored_name
-    if stored_path.exists():
-        stored_path.unlink()
+    try:
+        delete_stored_document(settings, document.stored_name)
+    except CloudBackupError as exc:
+        raise HTTPException(502, str(exc)) from exc
 
     db.delete(document)
     db.commit()
@@ -296,13 +297,10 @@ async def upload_documents(
             raise HTTPException(413, f"Soubor {upload.filename} překračuje limit 15 MB.")
         suffix = Path(upload.filename or "document").suffix.lower()
         stored_name = f"{uuid.uuid4().hex}{suffix}"
-        (settings.storage_path / stored_name).write_bytes(content)
         try:
-            backup_uri = upload_document_backup(settings, stored_name, content_type, content)
+            storage_uri = store_document(settings, stored_name, content_type, content)
         except CloudBackupError as exc:
-            if settings.google_cloud_storage_backup_required:
-                raise HTTPException(502, str(exc)) from exc
-            backup_uri = None
+            raise HTTPException(502, str(exc)) from exc
         assigned_dispatcher = dispatcher if identity.role == "owner" else identity.name
         document = Document(original_name=upload.filename or stored_name, stored_name=stored_name, mime_type=content_type, status="processing", dispatcher=assigned_dispatcher, uploaded_by=identity.name)
         db.add(document)
@@ -313,9 +311,8 @@ async def upload_documents(
             "uploaded",
             identity.name,
             {
-                "backup_uri": backup_uri,
-                "backup_required": settings.google_cloud_storage_backup_required,
-                "backup_timestamp": backup_timestamp_iso() if backup_uri else None,
+                "storage_uri": storage_uri,
+                "storage_timestamp": backup_timestamp_iso(),
             },
         )
         try:

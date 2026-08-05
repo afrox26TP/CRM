@@ -34,6 +34,11 @@ def _decimal(value: str | None) -> Decimal | None:
         return None
 
 
+def _cmr_number_from_text(value: str) -> str | None:
+    match = re.search(r"\bCMR\s*(?:NO\.?|NUMBER|ČÍSLO|CISLO|Č\.)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9./-]{3,})", value, re.IGNORECASE)
+    return match.group(1).strip(".-/") if match else None
+
+
 def _mock_extract(filename: str, content: bytes) -> ExtractionResult:
     """Deterministic local demo; never presented as real OCR."""
     fingerprint = int(hashlib.sha256(content or filename.encode()).hexdigest()[:6], 16)
@@ -95,6 +100,10 @@ def _google_extract(settings: Settings, mime_type: str, content: bytes) -> Extra
     has_tax_fields = any(key in entities for key in ("total_amount", "net_amount", "supplier_name"))
     if cmr and not has_tax_fields:
         return ExtractionResult(document_type="cmr", confidence=confidence("cmr_number", "cmr"), cmr_number=cmr)
+    if not has_tax_fields:
+        cmr = _cmr_number_from_text(document.text or "")
+        if cmr:
+            return ExtractionResult(document_type="cmr", confidence=Decimal("0.75"), cmr_number=cmr)
 
     gross = _decimal(text("total_amount", "gross_amount"))
     net = _decimal(text("net_amount", "subtotal"))
